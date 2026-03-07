@@ -7,17 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    libopenblas-dev \
-    liblapack-dev \
-    libx11-dev \
-    libgtk-3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
+# Install face-recognition without dependency resolution so pip does not
+# attempt to build heavy dlib from source during Render free-tier builds.
+RUN pip install --no-deps face-recognition==1.3.0
 
 COPY . .
 
