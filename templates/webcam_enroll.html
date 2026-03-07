@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Enroll Face</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: linear-gradient(135deg, #eef3ff, #f9fbff); min-height: 100vh; }
+    .card { border-radius: 18px; }
+    #video { width: 100%; max-width: 400px; border-radius: 12px; }
+    #canvas { display: none; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-primary px-3">
+  <span class="navbar-brand fw-bold">Enroll Face</span>
+  <a href="/webcam" class="btn btn-sm btn-outline-light">Back</a>
+</nav>
+
+<div class="container mt-4">
+  
+  <div class="card mb-3">
+    <div class="card-body">
+      <input type="text" id="nameInput" class="form-control form-control-lg" placeholder="Enter name">
+    </div>
+  </div>
+  
+  <div class="card mb-3">
+    <div class="card-body text-center">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas"></canvas>
+      <div class="mt-2">
+        <button id="startBtn" class="btn btn-success">Start Camera</button>
+      </div>
+      <div id="camStatus" class="text-muted">Click Start Camera</div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="progress mb-3">
+        <div id="progressBar" class="progress-bar bg-success" style="width:0%">0%</div>
+      </div>
+      <div id="status" class="alert alert-secondary">Enter name, start camera, click Enroll</div>
+      <button id="enrollBtn" class="btn btn-primary btn-lg w-100" disabled>Start Enrollment</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const nameInput = document.getElementById("nameInput");
+const startBtn = document.getElementById("startBtn");
+const enrollBtn = document.getElementById("enrollBtn");
+const status = document.getElementById("status");
+const progressBar = document.getElementById("progressBar");
+const camStatus = document.getElementById("camStatus");
+
+let stream = null;
+let isEnrolling = false;
+const total = 5;
+
+// Start camera
+startBtn.onclick = async () => {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    await video.play();
+    startBtn.disabled = true;
+    startBtn.textContent = "Camera On";
+    camStatus.textContent = "Camera ready";
+    enrollBtn.disabled = false;
+  } catch (err) {
+    camStatus.innerHTML = "<span class='text-danger'>Camera error: " + err.message + "</span>";
+  }
+};
+
+function captureImage() {
+  if (!video.videoWidth || !video.videoHeight) {
+    throw new Error("Camera frame is not ready. Please wait a moment and try again.");
+  }
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0);
+  return canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+}
+
+// Enrollment
+enrollBtn.onclick = async () => {
+
+  const name = nameInput.value.trim();
+  if (!name) {
+    status.className = "alert alert-warning";
+    status.textContent = "Enter a name first";
+    return;
+  }
+
+  if (isEnrolling) return;
+
+  isEnrolling = true;
+  enrollBtn.disabled = true;
+  status.className = "alert alert-info";
+  status.textContent = "Starting enrollment...";
+
+  let captured = 0;
+
+  while (captured < total) {
+
+    let imageData = "";
+    try {
+      imageData = captureImage();
+    } catch (err) {
+      status.className = "alert alert-warning";
+      status.textContent = err.message;
+      await new Promise(resolve => setTimeout(resolve, 700));
+      continue;
+    }
+
+    try {
+      const resp = await fetch("/webcam_enroll", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ name, image: imageData })
+      });
+
+      const data = await resp.json();
+
+      if (data.status === "ENROLLING") {
+        captured = data.count;
+        const percent = Math.round((captured / total) * 100);
+        progressBar.style.width = percent + "%";
+        progressBar.textContent = percent + "%";
+        status.textContent = "Captured " + captured + "/" + total;
+      }
+
+      else if (data.status === "ENROLL_COMPLETE") {
+        progressBar.style.width = "100%";
+        progressBar.textContent = "100%";
+        status.className = "alert alert-success";
+        status.innerHTML = "<strong>Enrollment Complete!</strong>";
+        isEnrolling = false;
+
+        setTimeout(() => {
+          window.location.href = "/faces";
+        }, 1500);
+
+        return;
+      }
+
+      else if (data.status === "NO_FACE") {
+        status.className = "alert alert-warning";
+        status.textContent = "No face detected. Adjust position.";
+      }
+
+      else {
+        status.className = "alert alert-danger";
+        status.textContent = "Error: " + data.status;
+        isEnrolling = false;
+        enrollBtn.disabled = false;
+        return;
+      }
+
+    } catch (err) {
+      status.className = "alert alert-danger";
+      status.textContent = "Error: " + err.message;
+      isEnrolling = false;
+      enrollBtn.disabled = false;
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 800));
+  }
+};
+});
+</script>
+
+</body>
+</html>

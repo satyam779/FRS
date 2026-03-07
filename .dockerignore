@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.gitignore
+attendance/
+known_faces/
+known_faces_encodings.pkl
+users.json
+*.whl
