@@ -159,6 +159,11 @@ def esp32_register():
     ws_push_all()
     return jsonify({"status": "ok", "ip": ESP32_CAM_IP})
 
+# ================= HOME =================
+@app.route("/")
+def index():
+    return redirect("/dashboard")
+
 # ================= AUTH =================
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -631,5 +636,5 @@ def charts():
 # ================= RUN =================
 if __name__ == "__main__":
     register_mdns_service()
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
  
