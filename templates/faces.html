@@ -8,25 +8,29 @@
 <body>
 
 <nav class="navbar navbar-dark bg-dark px-3">
-  <span class="navbar-brand">Enrolled Faces</span>
-  <a href="/dashboard" class="btn btn-light btn-sm">Back</a>
+  <span class="navbar-brand">👤 Enrolled Faces</span>
+  <a href="/dashboard" class="btn btn-sm btn-light">Back</a>
 </nav>
 
 <div class="container mt-4">
 
-  <a href="/add_face" class="btn btn-primary mb-3">Add Face</a>
+  <!-- ADD FACE OPTIONS -->
+  <div class="mb-3">
+    <a href="/add_face_upload" class="btn btn-primary me-2">➕ Upload Images</a>
+    <a href="/add_face_capture" class="btn btn-secondary">📸 Live Capture (10)</a>
+  </div>
 
+  <!-- USER LIST -->
   <div class="row">
     {% for u in users %}
-    <div class="col-md-3 mb-3">
-      <div class="card text-center shadow-sm">
+    <div class="col-6 col-md-3 mb-4 text-center">
+      <div class="card shadow-sm">
         <div class="card-body">
           <h6>{{ u }}</h6>
-          <form method="POST" action="/delete_face" class="d-inline">
-            <input type="hidden" name="name" value="{{ u }}">
-            <button type="submit" class="btn btn-danger btn-sm"
-                    onclick="return confirm('Delete this face?')">Delete</button>
-          </form>
+          <a href="/delete/{{u}}" class="btn btn-sm btn-danger"
+             onclick="return confirm('Delete {{u}}?')">
+            Delete
+          </a>
         </div>
       </div>
     </div>
@@ -34,5 +38,6 @@
   </div>
 
 </div>
+
 </body>
 </html>

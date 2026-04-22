@@ -1,34 +1,246 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Dashboard</title>
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Attendance Dashboard</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(135deg, #eef3ff, #f9fbff);
+      min-height: 100vh;
+    }
+    .card {
+      border-radius: 18px;
+    }
+    .big-text {
+      font-size: 2rem;
+      font-weight: 700;
+    }
+    .status-text {
+      font-size: 1.2rem;
+      font-weight: 600;
+    }
+    .live-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: #dc3545;
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    #esp32Stream {
+      width: 100%;
+      max-width: 720px;
+      aspect-ratio: 4/3;
+      object-fit: cover;
+      display: none;
+      border-radius: 12px;
+      border: 3px solid #0d6efd;
+    }
+  </style>
 </head>
-<body class="bg-light">
+<body>
 
-<nav class="navbar navbar-dark bg-primary px-3">
-  <span class="navbar-brand">Dashboard</span>
-  <a href="/logout" class="btn btn-outline-light btn-sm">Logout</a>
+<nav class="navbar navbar-dark bg-primary shadow px-3">
+  <span class="navbar-brand fw-bold">Smart Attendance System</span>
+  <div>
+    {% if session.role == "admin" %}
+    <a href="/users" class="btn btn-sm btn-outline-light me-2">Users</a>
+    {% endif %}
+    <a href="/logout" class="btn btn-sm btn-outline-light">Logout</a>
+  </div>
 </nav>
 
 <div class="container mt-4">
 
-  <div class="row g-3">
-    <div class="col-md-6">
-      <a href="/webcam" class="btn btn-outline-success w-100 btn-lg">Webcam Attendance</a>
+  <div class="card shadow-lg mb-4">
+    <div class="card-body text-center">
+      <div class="text-muted">Current System Mode</div>
+      <div id="modeText" class="big-text text-primary">IDLE</div>
     </div>
-    <div class="col-md-6">
-      <a href="/faces" class="btn btn-outline-primary w-100 btn-lg">Manage Faces</a>
+  </div>
+
+  <div class="card shadow-lg mb-4">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-6">
+          <div class="text-muted">ESP32-CAM Connection</div>
+          <div id="esp32State" class="fw-bold text-danger">Not Connected</div>
+          <div id="esp32Url" class="small text-muted">Waiting for registration</div>
+        </div>
+        <div class="col-md-6">
+          <div class="text-muted">ESP32-Board (Nextion) Connection</div>
+          <div id="boardState" class="fw-bold text-danger">Not Connected</div>
+          <div id="boardIp" class="small text-muted">Waiting for /mode or /board_ping</div>
+        </div>
+        <div class="col-md-6">
+          <form id="esp32SetForm" class="d-flex gap-2">
+            <input id="esp32IpInput" class="form-control" placeholder="ESP32 IP (e.g. 192.168.1.50)">
+            <button class="btn btn-outline-primary" type="submit">Set IP</button>
+          </form>
+        </div>
+      </div>
     </div>
-    <div class="col-md-6">
-      <a href="/attendance" class="btn btn-outline-info w-100 btn-lg">Attendance Records</a>
+  </div>
+
+  <div class="card shadow-lg mb-4 d-none" id="enrollCard">
+    <div class="card-body text-center position-relative">
+      <span class="live-badge">LIVE</span>
+      <h5 class="mb-1">Face Enrollment in Progress</h5>
+      <div id="enrollName" class="fw-bold fs-5 text-primary mb-3">--</div>
+      <div class="fw-semibold text-primary mb-2">ESP32 Live Preview</div>
+      <div class="d-flex justify-content-center mb-3">
+        <img id="esp32Stream" alt="ESP32 stream">
+      </div>
+      <div class="progress mb-2">
+        <div id="enrollProgress"
+             class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+             style="width:0%">0%</div>
+      </div>
+      <div id="enrollCount" class="text-muted">Waiting for capture...</div>
     </div>
-    <div class="col-md-6">
-      <a href="/users" class="btn btn-outline-warning w-100 btn-lg">User Management</a>
+  </div>
+
+  <div class="card shadow-lg mb-4 d-none" id="attendCard">
+    <div class="card-body text-center">
+      <div id="attendName" class="big-text">--</div>
+      <div id="attendStatus" class="status-text text-secondary">WAIT</div>
+      <div id="attendConf" class="text-muted">0%</div>
+    </div>
+  </div>
+
+  <div class="card shadow-lg">
+    <div class="card-body">
+      <div class="d-grid gap-3">
+        <a href="/faces" class="btn btn-outline-primary btn-lg">Manage Faces</a>
+        <a href="/attendance" class="btn btn-outline-success btn-lg">Attendance Records</a>
+        <a href="/charts" class="btn btn-outline-warning btn-lg">Reports and Charts</a>
+      </div>
     </div>
   </div>
 
 </div>
+
+<script>
+let currentStreamUrl = "{{ stream_url }}";
+let cachedEnrollName = "";
+
+function stopStream() {
+  const img = document.getElementById("esp32Stream");
+  img.src = "";
+  img.style.display = "none";
+}
+
+function updateEsp32State(s) {
+  const state = document.getElementById("esp32State");
+  const url = document.getElementById("esp32Url");
+  currentStreamUrl = s.stream_url || "";
+
+  if (s.esp32_connected) {
+    state.innerText = "Connected";
+    state.className = "fw-bold text-success";
+    url.innerText = currentStreamUrl;
+  } else {
+    state.innerText = "Not Connected";
+    state.className = "fw-bold text-danger";
+    url.innerText = "Waiting for /esp32_register or manual IP";
+  }
+}
+
+function updateBoardState(s) {
+  const state = document.getElementById("boardState");
+  const ip = document.getElementById("boardIp");
+  if (s.board_connected) {
+    state.innerText = "Connected";
+    state.className = "fw-bold text-success";
+    ip.innerText = s.board_ip || "-";
+  } else {
+    state.innerText = "Not Connected";
+    state.className = "fw-bold text-danger";
+    ip.innerText = "No recent /mode or /board_ping request";
+  }
+}
+
+function updateDashboard() {
+  fetch("/status")
+    .then(r => r.json())
+    .then(s => {
+      updateEsp32State(s);
+      updateBoardState(s);
+      document.getElementById("modeText").innerText = (s.mode || "idle").toUpperCase();
+
+      if (s.mode === "enroll") {
+        document.getElementById("enrollCard").classList.remove("d-none");
+        document.getElementById("attendCard").classList.add("d-none");
+
+        if (s.name) cachedEnrollName = s.name;
+        document.getElementById("enrollName").innerText = cachedEnrollName || "Starting...";
+
+        const count = s.enroll_count || 0;
+        const percent = count * 10;
+        const bar = document.getElementById("enrollProgress");
+        bar.style.width = percent + "%";
+        bar.innerText = percent + "%";
+
+        const info = document.getElementById("enrollCount");
+        info.innerText = `Captured ${count} / 10 images`;
+
+        const img = document.getElementById("esp32Stream");
+        if (currentStreamUrl) {
+          if (img.src !== currentStreamUrl) img.src = currentStreamUrl;
+          img.style.display = "block";
+        } else {
+          img.style.display = "none";
+          info.innerText = "ESP32 stream unavailable. Set IP or register device.";
+        }
+      } else if (s.mode === "attend") {
+        document.getElementById("enrollCard").classList.add("d-none");
+        document.getElementById("attendCard").classList.remove("d-none");
+        stopStream();
+        cachedEnrollName = "";
+      } else {
+        document.getElementById("enrollCard").classList.add("d-none");
+        document.getElementById("attendCard").classList.add("d-none");
+        stopStream();
+        cachedEnrollName = "";
+      }
+    });
+
+  fetch("/last_recognition")
+    .then(r => r.json())
+    .then(d => {
+      if (d.status === "ATTENDANCE_MARKED") {
+        document.getElementById("attendName").innerText = d.name;
+        document.getElementById("attendStatus").innerText = d.entry;
+        document.getElementById("attendConf").innerText = d.confidence + "%";
+        document.getElementById("attendStatus").className =
+          "status-text " + (d.entry === "IN" ? "text-success" : "text-danger");
+      }
+    });
+}
+
+document.getElementById("esp32SetForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const ip = document.getElementById("esp32IpInput").value.trim();
+  if (!ip) return;
+
+  try {
+    const r = await fetch("/esp32_set", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ip})
+    });
+    if (r.ok) updateDashboard();
+  } catch (_e) {}
+});
+
+setInterval(updateDashboard, 700);
+updateDashboard();
+</script>
+
 </body>
 </html>

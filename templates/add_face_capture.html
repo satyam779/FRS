@@ -18,7 +18,7 @@
   <div class="card shadow-lg mx-auto" style="max-width: 520px;">
     <div class="card-body">
 
-      <h5 class="text-center mb-3">Capture 5 Face Images</h5>
+      <h5 class="text-center mb-3">Capture 10 Face Images</h5>
 
       <div class="mb-3">
         <label class="form-label">Person Name</label>
@@ -31,8 +31,9 @@
                style="width:100%; max-height:300px;"></video>
       </div>
 
-      <div id="status" class="alert alert-info text-center py-2">
-        Camera Ready
+      <div class="alert alert-info text-center py-2">
+        Keep your face steady for <b>2 seconds</b><br>
+        10 images will be captured automatically
       </div>
 
       <div class="d-grid">
@@ -55,25 +56,10 @@
 const video = document.getElementById("video");
 const form = document.getElementById("form");
 const hiddenName = document.getElementById("hiddenName");
-const statusBox = document.getElementById("status");
 
-let streamRef = null;
-
-// Start camera safely
-async function startCamera() {
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    try {
-      streamRef = await navigator.mediaDevices.getUserMedia({ video: true });
-      video.srcObject = streamRef;
-    } catch (err) {
-      alert("Camera blocked. Use http://localhost:5000 or HTTPS.");
-    }
-  } else {
-    alert("Camera not supported in this browser");
-  }
-}
-
-startCamera();
+navigator.mediaDevices.getUserMedia({ video: true })
+  .then(stream => video.srcObject = stream)
+  .catch(() => alert("Camera access blocked. Use localhost or HTTPS"));
 
 function startCapture() {
   const name = document.getElementById("name").value.trim();
@@ -83,14 +69,9 @@ function startCapture() {
   }
 
   hiddenName.value = name;
-  form.innerHTML = '<input type="hidden" name="name" value="'+name+'">';
-
   let count = 0;
-  statusBox.className = "alert alert-warning text-center";
-  statusBox.innerHTML = "Capturing...";
 
   const interval = setInterval(() => {
-
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -111,23 +92,11 @@ function startCapture() {
     }, "image/jpeg");
 
     count++;
-    statusBox.innerHTML = "Captured " + count + " / 5";
-
-    if (count === 5) {
+    if (count === 10) {
       clearInterval(interval);
-
-      // Stop camera
-      if (streamRef) {
-        streamRef.getTracks().forEach(track => track.stop());
-      }
-
-      statusBox.className = "alert alert-success text-center";
-      statusBox.innerHTML = "Upload Complete!";
-
-      setTimeout(() => form.submit(), 800);
+      setTimeout(() => form.submit(), 500);
     }
-
-  }, 800); // 0.8 second gap for better face variation
+  }, 200);
 }
 </script>
 
